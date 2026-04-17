@@ -25,6 +25,30 @@ To evaluate the performance of the snooping-based cache coherence protocol, you 
    - L3 cache: 2MB, 16-way set associative, 64B cache line size
 
  
+---
+
+Ran with `sbatch ./run_benchmark_and_collect.sh <output_folder> smp_classic --num_cores <number> --l2_size 256KiB`
+
+| No. Proc. | CPI Mean (per CPU) | CPI Std Dev | Misses (total) | Hits (total) | L1 Miss Ratio Mean | L1 Miss Ratio Std Dev | UpgradeReq | snoopTraffic |
+|-----------|-------------------|--------|-----------|-----------|-------------------|----------------------|------------|--------------|
+| 2         | 1.6312255 | 0.0124215 | 180336 | 2547375 | 0.066122 | 0.000538 | 57381 | 6045376 |
+| 4         | 1.7623113 | 0.0503450 | 215730 | 3202260 | 0.063101 | 0.001489 | 26758 | 9918784 |
+| 8         | 1.7199663 | 0.1016798 | 214707 | 4636967 | 0.044113 | 0.004021 | 15706 | 10743168 |
+| 16        | 1.5476241 | 0.1063346 | 258746 | 10846299 | 0.023066 | 0.005506 | 16229 | 14154688 |
+
+The results show CPI peaks at 4 cores (1.762) before steadily declining to its lowest at 16 cores (1.548).
+
+At 2 cores CPI is low as coherence overhead is minimal. Where only one other core snoops each transaction. Moving to 4 cores CPI rises despite each thread doing less work. This might indicate that cores are competing for write ownership of shared cache lines (from an increase of `ReadExReq` and appearance of `ReadRespWithInvalidate`) and this overhead likely outweighs the benefit of parallelism.
+
+From 8 to 16 cores CPI drops significantly. Each thread processes roughly 6 rows, corresponding to about 4.8KB of active data that fits within the private 32KB L1 cache. This reduces L1 miss ratio from 4.4% to 2.3% where most data accesses are served locally without hitting the bus at all.
+
+Across all the configurations core 0 is an outlier with the highest CPI. That is because it is the master thread and it handles the sequential outer loop and barrier synchronization, which does not parallelize.
+
+
+Note: All runs successfully completed the Cholesky decomposition and terminated with the following error during the function `print_matrix(double** M)` call:
+`src/cpu/minor/execute.cc:970: panic: We should never hit the case where we try to commit from a suspended thread as the streamSeqNum should not match` `Memory Usage: XXXXX KBytes`. Since the crash occurs after the computation is fully complete the collected metrics are valid for the parallel Cholesky workload.
+
+---
 
 ## Assessing the impact of false sharing on performance in directory based cache coherence protocols (4 points)
 
