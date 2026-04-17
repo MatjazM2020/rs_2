@@ -7,7 +7,6 @@ hpc_gemm_sol.c
 hpc_gemm_sol
 jacobi.c
 *.out
-*.txt
 .Xilinx/
 *.back
 .vscode/
