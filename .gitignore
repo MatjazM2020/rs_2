@@ -18,7 +18,6 @@ jacobi.c
 *.o
 moesi_two_level.py
 04-GEM5-RCC/utils/
-*.sh
 !apptainer_make.sh
 workload/lu_decomp/
 __pycache__/
