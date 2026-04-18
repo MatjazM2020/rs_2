@@ -11,42 +11,64 @@ from __future__ import absolute_import
 import math
 from m5.defines import buildEnv
 from m5.util import fatal, panic
-from m5.objects import *
 
 from gem5.coherence_protocol import CoherenceProtocol
 from gem5.utils.override import overrides
 from gem5.utils.requires import requires
 
+# Declare protocol requirement first
+requires(coherence_protocol_required=CoherenceProtocol.MESI_TWO_LEVEL)
+
+# Import m5.objects first with wildcard
+from m5.objects import *
+
+# Now try to import specific MESI classes with fallback
+try:
+    from m5.objects import (
+        MESI_Two_Level_L1Cache_Controller,
+        MESI_Two_Level_L2Cache_Controller,
+        MESI_Two_Level_DMA_Controller,
+        MESI_Two_Level_Directory_Controller,
+    )
+except ImportError as e:
+    # If protocol controllers aren't directly available, try getting them from m5.objects
+    # by accessing through the module dictionary
+    import m5.objects as m5_objects_module
+    
+    # The protocol controllers should be available after requires() call
+    MESI_Two_Level_L1Cache_Controller = getattr(m5_objects_module, 'MESI_Two_Level_L1Cache_Controller', None)
+    MESI_Two_Level_L2Cache_Controller = getattr(m5_objects_module, 'MESI_Two_Level_L2Cache_Controller', None)
+    MESI_Two_Level_DMA_Controller = getattr(m5_objects_module, 'MESI_Two_Level_DMA_Controller', None)
+    MESI_Two_Level_Directory_Controller = getattr(m5_objects_module, 'MESI_Two_Level_Directory_Controller', None)
+    
+    if any(cls is None for cls in [MESI_Two_Level_L1Cache_Controller, MESI_Two_Level_L2Cache_Controller,
+                                    MESI_Two_Level_DMA_Controller, MESI_Two_Level_Directory_Controller]):
+        # Debug: print available MESI classes
+        mesi_classes = [name for name in dir(m5_objects_module) if 'MESI' in name]
+        error_msg = f"MESI protocol classes not found in m5.objects. Original error: {e}\n"
+        error_msg += f"Available MESI classes: {mesi_classes}\n"
+        error_msg += "Make sure GEM5 is built with MESI_TWO_LEVEL protocol support."
+        raise ImportError(error_msg)
+
 from gem5.components.processors.abstract_core import AbstractCore
 
 from networks import Circle, Mesh_XY, SimplePt2Pt, Crossbar
 
-
-
 from m5.objects import (
-    DMASequencer, # DMASequencer is a sequencer object that feeds requests to the DMA controller and receives responses from the DMA controller
+    DMASequencer,
     ClockDomain,
-    MessageBuffer, # MessageBuffer is a simple message buffer object that stores the messages, all the requests and responses are transmitted through this buffer
-    # Ruby objects
-    RubyCache, # RubyCache is a simple cache memory object that stores the cache data and tags
-    RubyPrefetcher, # RubyPrefetcher is a prefetcher object that is used to prefetch data into the cache
-    RubyDirectoryMemory, # RubyDirectoryMemory is a directory memory object that stores the directory data and tags
-    RubyPortProxy, # RubyPortProxy is a proxy port object that is used to load binaries and other functional-only things. Communication between the Ruby system and the rest of the system is done through this port.
-    RubySequencer, # RubySequencer feeds requests to the cache memory object and receives responses from the cache memory object
-    RubySystem, # RubySystem is the top-level Ruby object that contains all the Ruby objects
-    # MESI Two Level
-    MESI_Two_Level_L1Cache_Controller, # MESI_Two_Level_L1Cache_Controller is a controller object that manages the L1 cache
-    MESI_Two_Level_L2Cache_Controller, # MESI_Two_Level_L2Cache_Controller is a controller object that manages the L2 cache
-    MESI_Two_Level_DMA_Controller, # MESI_Two_Level_DMA_Controller is a controller object that manages the DMA controller
-    MESI_Two_Level_Directory_Controller,  # MESI_Two_Level_Directory_Controller is a controller object that manages the directory controller   
-    # NETWORK
+    MessageBuffer,
+    RubyCache,
+    RubyPrefetcher,
+    RubyDirectoryMemory,
+    RubyPortProxy,
+    RubySequencer,
+    RubySystem,
     SimpleExtLink,
     SimpleIntLink,
     SimpleNetwork,
     Switch,
 )
-
-
 
 requires(coherence_protocol_required=CoherenceProtocol.MESI_TWO_LEVEL)
 

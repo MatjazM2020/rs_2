@@ -11,83 +11,145 @@ from __future__ import absolute_import
 import math
 from m5.defines import buildEnv
 from m5.util import fatal, panic
-from m5.objects import *
 
 from gem5.coherence_protocol import CoherenceProtocol
 from gem5.utils.override import overrides
 from gem5.utils.requires import requires
+import sys
 
-from gem5.components.processors.abstract_core import AbstractCore
+# Try to declare protocol requirement - but don't fail if protocol not available
+_ruby_protocol_available = True
+try:
+    requires(coherence_protocol_required=CoherenceProtocol.MESI_TWO_LEVEL)
+except Exception as e:
+    _ruby_protocol_available = False
+    # Protocol not compiled in - will try fallback
+
+# Import m5.objects with wildcard to populate namespace
+from m5.objects import *
+
+# Now try to import specific MESI classes
+_MESI_classes_available = False
+try:
+    from m5.objects import (
+        MESI_Two_Level_L1Cache_Controller,
+        MESI_Two_Level_L2Cache_Controller,
+        MESI_Two_Level_DMA_Controller,
+        MESI_Two_Level_Directory_Controller,
+    )
+    _MESI_classes_available = True
+except ImportError:
+    # MESI classes not available - create stub classes
+    print("\n" + "="*80, file=sys.stderr)
+    print("ERROR: GEM5 Ruby MESI_TWO_LEVEL protocol not available", file=sys.stderr)
+    print("="*80, file=sys.stderr)
+    print("\nThe GEM5 binary was not compiled with MESI_TWO_LEVEL protocol support.", file=sys.stderr)
+    print("\nTo fix this issue, rebuild GEM5 with Ruby protocol support:", file=sys.stderr)
+    print("  cd /d/hpc/projects/FRI/GEM5/gem5_workspace/gem5", file=sys.stderr)
+    print("  scons build/RISCV/gem5.opt --with-protocol=MESI_TWO_LEVEL -j$(nproc)", file=sys.stderr)
+    print("\nOr, use the classic cache hierarchy instead in the simulation scripts.", file=sys.stderr)
+    print("="*80 + "\n", file=sys.stderr)
+    
+    # Create placeholder classes that will raise errors if used
+    class _MissingMESIClass:
+        def __init__(self, *args, **kwargs):
+            raise RuntimeError("MESI_TWO_LEVEL protocol not compiled in GEM5. "
+                             "See stderr for instructions on how to rebuild GEM5 with Ruby support.")
+    
+    MESI_Two_Level_L1Cache_Controller = _MissingMESIClass
+    MESI_Two_Level_L2Cache_Controller = _MissingMESIClass
+    MESI_Two_Level_DMA_Controller = _MissingMESIClass
+    MESI_Two_Level_Directory_Controller = _MissingMESIClass
+
+# Try to import remaining Ruby classes
+try:
+    from m5.objects import (
+        DMASequencer,
+        ClockDomain,
+        MessageBuffer,
+        RubyCache,
+        RubyPrefetcher,
+        RubyDirectoryMemory,
+        RubyPortProxy,
+        RubySequencer,
+        RubySystem,
+        SimpleExtLink,
+        SimpleIntLink,
+        SimpleNetwork,
+        Switch,
+    )
+except ImportError:
+    if _MESI_classes_available:
+        # If MESI classes are available but other Ruby classes aren't, that's odd
+        raise
+    else:
+        # If MESI classes aren't available, other Ruby classes might not be either
+        # But some might be available, so we'll continue
+        pass
+
+try:
+    from gem5.components.processors.abstract_core import AbstractCore
+    from gem5.isas import ISA
+    from gem5.components.boards.abstract_board import AbstractBoard
+    from gem5.components.cachehierarchies.abstract_cache_hierarchy import AbstractCacheHierarchy
+    from gem5.components.cachehierarchies.abstract_two_level_cache_hierarchy import AbstractTwoLevelCacheHierarchy
+    from gem5.components.cachehierarchies.ruby.abstract_ruby_cache_hierarchy import AbstractRubyCacheHierarchy
+except ImportError as e:
+    if _MESI_classes_available:
+        raise
+    # If Ruby isn't available, these imports might fail. We'll handle this later.
+    AbstractCacheHierarchy = None
+    AbstractTwoLevelCacheHierarchy = None
+    AbstractRubyCacheHierarchy = None
 
 
-from m5.objects import (
-    DMASequencer, # DMASequencer is a sequencer object that feeds requests to the DMA controller and receives responses from the DMA controller
-    ClockDomain,
-    MessageBuffer, # MessageBuffer is a simple message buffer object that stores the messages, all the requests and responses are transmitted through this buffer
-    # Ruby objects
-    RubyCache, # RubyCache is a simple cache memory object that stores the cache data and tags
-    RubyPrefetcher, # RubyPrefetcher is a prefetcher object that is used to prefetch data into the cache
-    RubyDirectoryMemory, # RubyDirectoryMemory is a directory memory object that stores the directory data and tags
-    RubyPortProxy, # RubyPortProxy is a proxy port object that is used to load binaries and other functional-only things. Communication between the Ruby system and the rest of the system is done through this port.
-    RubySequencer, # RubySequencer feeds requests to the cache memory object and receives responses from the cache memory object
-    RubySystem, # RubySystem is the top-level Ruby object that contains all the Ruby objects
-    # MESI Two Level
-    MESI_Two_Level_L1Cache_Controller, # MESI_Two_Level_L1Cache_Controller is a controller object that manages the L1 cache
-    MESI_Two_Level_L2Cache_Controller, # MESI_Two_Level_L2Cache_Controller is a controller object that manages the L2 cache
-    MESI_Two_Level_DMA_Controller, # MESI_Two_Level_DMA_Controller is a controller object that manages the DMA controller
-    MESI_Two_Level_Directory_Controller,  # MESI_Two_Level_Directory_Controller is a controller object that manages the directory controller   
-    # NETWORK
-    SimpleExtLink,
-    SimpleIntLink,
-    SimpleNetwork,
-    Switch,
-)
 
-
-
-requires(coherence_protocol_required=CoherenceProtocol.MESI_TWO_LEVEL)
-
-from gem5.isas import ISA
-from gem5.components.boards.abstract_board import AbstractBoard
-from gem5.components.cachehierarchies.abstract_cache_hierarchy import AbstractCacheHierarchy
-from gem5.components.cachehierarchies.abstract_two_level_cache_hierarchy import AbstractTwoLevelCacheHierarchy
-from gem5.components.cachehierarchies.ruby.abstract_ruby_cache_hierarchy import AbstractRubyCacheHierarchy
-
-
-
-class MESITwoLevelCacheHierarchy(
-    AbstractRubyCacheHierarchy, AbstractTwoLevelCacheHierarchy
-):
-    """A two level private L1 shared L2 MESI hierarchy.
-
-    In addition to the normal two level parameters, you can also change the
-    number of L2 banks in this protocol.
-
-    The on-chip network is a point-to-point all-to-all simple network.
-    """
-
-    def __init__(
-        self,
-        l1i_size: str,
-        l1i_assoc: str,
-        l1d_size: str,
-        l1d_assoc: str,
-        l2_size: str,
-        l2_assoc: str,
-        num_l2_banks: int,
+# Only define the cache hierarchy class if Ruby is available
+if _MESI_classes_available and AbstractRubyCacheHierarchy is not None:
+    class MESITwoLevelCacheHierarchy(
+        AbstractRubyCacheHierarchy, AbstractTwoLevelCacheHierarchy
     ):
-        AbstractRubyCacheHierarchy.__init__(self=self)
-        AbstractTwoLevelCacheHierarchy.__init__(
-            self,
-            l1i_size=l1i_size,
-            l1i_assoc=l1i_assoc,
-            l1d_size=l1d_size,
-            l1d_assoc=l1d_assoc,
-            l2_size=l2_size,
-            l2_assoc=l2_assoc,
-        )
+        """A two level private L1 shared L2 MESI hierarchy.
 
-        self._num_l2_banks = num_l2_banks
+        In addition to the normal two level parameters, you can also change the
+        number of L2 banks in this protocol.
+
+        The on-chip network is a point-to-point all-to-all simple network.
+        """
+
+        def __init__(
+            self,
+            l1i_size: str,
+            l1i_assoc: str,
+            l1d_size: str,
+            l1d_assoc: str,
+            l2_size: str,
+            l2_assoc: str,
+            num_l2_banks: int,
+        ):
+            AbstractRubyCacheHierarchy.__init__(self=self)
+            AbstractTwoLevelCacheHierarchy.__init__(
+                self,
+                l1i_size=l1i_size,
+                l1i_assoc=l1i_assoc,
+                l1d_size=l1d_size,
+                l1d_assoc=l1d_assoc,
+                l2_size=l2_size,
+                l2_assoc=l2_assoc,
+            )
+
+            self._num_l2_banks = num_l2_banks
+else:
+    # Ruby not available, create a stub class
+    class MESITwoLevelCacheHierarchy:
+        """Stub class that raises an error when instantiated"""
+        
+        def __init__(self, *args, **kwargs):
+            raise RuntimeError(
+                "MESI_TWO_LEVEL protocol not compiled in GEM5.\n"
+                "Please rebuild GEM5 with Ruby protocol support or use the classic cache hierarchy.\n"
+                "See stderr output for rebuild instructions."
+            )
 
     @overrides(AbstractCacheHierarchy)
     def get_coherence_protocol(self):

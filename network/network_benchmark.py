@@ -16,7 +16,7 @@ from gem5.components.memory.single_channel import SingleChannelDDR3_1600
 from mesi_two_level import MESITwoLevelCacheHierarchy
 
 import m5
-
+import os
 import argparse
 
 
@@ -26,6 +26,19 @@ parser.add_argument("--l1_size", type=str, default="1KiB", help="L1 cache size."
 parser.add_argument("--l2_size", type=str, default="4KiB", help="L2 cache size.")
 
 args = parser.parse_args()
+
+# Set up output directory using m5.options.outdir
+# If called by gem5.opt, --outdir will have already set this
+# If run standalone, use default results directory
+if m5.options.outdir == ".":
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    workspace_root = os.path.dirname(os.path.dirname(script_dir))  # rs_2 folder
+    results_dir = os.path.join(workspace_root, "results", "network")
+else:
+    results_dir = m5.options.outdir
+
+os.makedirs(results_dir, exist_ok=True)
+m5.options.outdir = results_dir
 
 cache_hiearchy = MESITwoLevelCacheHierarchy(
     l1d_size=args.l1_size,
