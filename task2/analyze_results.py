@@ -160,6 +160,26 @@ def extract_key_metrics(metrics):
         'system.ruby_system.network.msg_count.Writeback_Data::total', 0
     )
     
+    # Execution time calculation
+    # Try to get total cycles from either system.cpu.numCycles or board.processor.numCycles
+    total_cycles = get_metric('system.cpu.numCycles')
+    if total_cycles is None or total_cycles == 0:
+        # Try alternative key for classic cache
+        total_cycles = get_metric('board.processor.numCycles')
+    
+    if total_cycles is None or total_cycles == 0:
+        # Fallback: sum cycles from per-CPU metrics
+        total_cycles = sum(extracted.get('total_cycles_per_cpu', []))
+    
+    extracted['total_cycles'] = total_cycles if total_cycles is not None else 0
+    
+    # Execution time in nanoseconds (assuming 1 GHz clock frequency)
+    # clock_frequency_hz = 1e9 (1 GHz)
+    # execution_time_ns = total_cycles / clock_frequency
+    # execution_time_seconds = total_cycles / 1e9
+    extracted['execution_time_ns'] = extracted['total_cycles']
+    extracted['execution_time_seconds'] = extracted['total_cycles'] / 1e9
+    
     return extracted
 
 
@@ -260,6 +280,7 @@ def process_results_directory(results_dir):
             'num_cpus': extracted.get('num_cpus', 0),
             'mean_cpi': mean_cpi,
             'std_cpi': std_cpi,
+            'execution_time_seconds': extracted.get('execution_time_seconds', 0),
             'invalidations': extracted.get('invalidations', 0),
             'loads_i': extracted.get('loads_I', 0),
             'loads_s': extracted.get('loads_S', 0),
@@ -287,7 +308,7 @@ def generate_csv_report(summary, output_file):
     
     fieldnames = [
         'variant', 'cores', 'num_cpus', 'mean_cpi', 'std_cpi',
-        'invalidations', 'loads_i', 'loads_s', 'loads_e', 'loads_m',
+        'execution_time_seconds', 'invalidations', 'loads_i', 'loads_s', 'loads_e', 'loads_m',
         'l2_gets', 'l2_getx', 'net_request_control', 'net_response_data',
         'net_writeback_data'
     ]
@@ -352,6 +373,10 @@ def main():
             print(f"  Mean CPI:           {record['mean_cpi']:.4f} ± {record['std_cpi']:.4f}")
         else:
             print(f"  Mean CPI:           N/A (no stats data)")
+        
+        # Execution time
+        exec_time = record['execution_time_seconds'] if record['execution_time_seconds'] is not None else 0
+        print(f"  Execution Time:     {exec_time:.6f} seconds")
         
         # Handle None values for other metrics
         inv = record['invalidations'] if record['invalidations'] is not None else 0

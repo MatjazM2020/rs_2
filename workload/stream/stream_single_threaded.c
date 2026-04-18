@@ -1,6 +1,5 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <omp.h>
 #include <gem5/m5ops.h>
 
 void set_array(double *array, size_t size, double value) {
@@ -10,14 +9,13 @@ void set_array(double *array, size_t size, double value) {
 }
 
 void stream_triad(double *a, double *b, double *c, size_t size, double scalar) {
-    #pragma omp parallel for
     for (size_t i = 0; i < size; i++) {
         a[i] = b[i] + scalar * c[i];
     }
 }
 
 int main() {
-    size_t array_size = 1000000; // Example size
+    size_t array_size = 1000000;
     double *a = (double *)malloc(array_size * sizeof(double));
     double *b = (double *)malloc(array_size * sizeof(double));
     double *c = (double *)malloc(array_size * sizeof(double));
@@ -29,12 +27,7 @@ int main() {
         return 1;
     }
 
-    // Set the number of OpenMP threads based on available processors
-    int num_threads = omp_get_num_procs(); // Get the number of available processors
-    omp_set_num_threads(num_threads);
-
-
-    double scalar = 3.14; // Example scalar value
+    double scalar = 3.14;
 
     // Initialize arrays
     set_array(a, array_size, 0.0);
@@ -59,8 +52,10 @@ int main() {
         printf("a[%zu] = %f\n", i, a[i]);
     }
 
+    // Free memory
     free(a);
     free(b);
     free(c);
+
     return 0;
 }

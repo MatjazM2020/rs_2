@@ -58,6 +58,7 @@ python3 analyze_results.py <results_directory> [output_base]
 
 **Extracted Metrics:**
 - **CPI**: Mean and standard deviation per CPU
+- **Execution time**: Total execution time in seconds (calculated from total cycles)
 - **Invalidations**: Total cache invalidations (`ruby_system.L1Cache_Controller.Inv::total`)
 - **Loads by state**: I, S, E, M states (`L1Cache_Controller.{state}.Load::total`)
 - **L2 requests**: L1_GETS and L1_GETX requests

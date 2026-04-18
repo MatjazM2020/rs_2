@@ -78,7 +78,7 @@ Regarding the GEM5 model, you will use the Python scripts located in the `networ
 3. Measure the following metrics connected to network performance:
    - Network traffic ( `network.msg_count.Request_Control`, `network.msg_count.Response_Data`, `network.msg_count.Writeback_Data`)
 
-- Parameters of cache hierarchy:
+- Parameters of cache hierarchy: 
   - L1 cache: 32KB, 8-way set associative, 64B cache line size
   - L2 cache: 256KB, 8-way set associative, 64B cache line size
   - Number of L2 cache banks: 1

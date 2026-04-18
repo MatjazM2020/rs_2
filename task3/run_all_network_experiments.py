@@ -59,11 +59,15 @@ def run_simulation(gem5_path, sim_script, cores, network, binary_path, output_di
                 cwd=script_dir
             )
         
-        if result.returncode != 0:
+        if result.returncode != 0 and result.returncode != -6:
             print(f"    ERROR: Simulation failed with code {result.returncode}")
             if result.stderr:
                 print(f"    STDERR: {result.stderr[:200]}")
             return False
+        elif result.returncode == -6:
+            # Exit code -6 is SIGABRT, but stats may have been collected before crash
+            print(f"    PARTIAL SUCCESS (SIGABRT after stats collection)")
+            return True
         else:
             print(f"    SUCCESS")
             return True

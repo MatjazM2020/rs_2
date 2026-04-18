@@ -104,7 +104,7 @@ class PrivateL1PrivateL2SharedL3CacheHierarchy(AbstractClassicCacheHierarchy):
         #3.a 
         cluster.l1i_cache = L1ICache(size=self._l1i_size, assoc=self._l1i_assoc);
         #3.b
-        cluster.l1d_cache = L1ICache(size=self._l1d_size, assoc=self._l1d_assoc);
+        cluster.l1d_cache = L1DCache(size=self._l1d_size, assoc=self._l1d_assoc);
         # conncect the l1i and l1d caches to the core
         core.connect_icache(cluster.l1i_cache.cpu_side)
         core.connect_dcache(cluster.l1d_cache.cpu_side)

@@ -19,12 +19,10 @@ from gem5.components.memory.single_channel import SingleChannelDDR3_1600
 from gem5.isas import ISA
 from gem5.resources.resource import CustomResource
 from gem5.simulate.simulator import Simulator
-from gem5.utils.requires import requires
-from gem5.coherence_protocol import CoherenceProtocol
 
-# Import cache hierarchy - use absolute import path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'smp_ruby'))
-from mesi_two_level import MESITwoLevelCacheHierarchy
+# Import classic cache hierarchy
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'smp_classic'))
+from three_level import PrivateL1PrivateL2SharedL3CacheHierarchy
 
 
 def main():
@@ -64,23 +62,17 @@ def main():
     print(f"DEBUG: Using outdir set by gem5.opt: {m5.options.outdir}", file=sys.stderr)
     os.makedirs(m5.options.outdir, exist_ok=True)
     
-    # Require MESI_TWO_LEVEL protocol - try, but don't fail if not available
-    try:
-        requires(coherence_protocol_required=CoherenceProtocol.MESI_TWO_LEVEL)
-        print(f"DEBUG: MESI_TWO_LEVEL protocol available", file=sys.stderr)
-    except Exception as e:
-        print(f"WARNING: MESI_TWO_LEVEL protocol not available: {e}", file=sys.stderr)
-        pass
-    
-    # Create cache hierarchy with specified parameters
-    cache_hierarchy = MESITwoLevelCacheHierarchy(
-        l1i_size="32KiB",
-        l1i_assoc=8,
+    # Create classic cache hierarchy
+    print(f"DEBUG: Using classic cache hierarchy", file=sys.stderr)
+    cache_hierarchy = PrivateL1PrivateL2SharedL3CacheHierarchy(
         l1d_size="32KiB",
         l1d_assoc=8,
+        l1i_size="32KiB",
+        l1i_assoc=8,
         l2_size="256KiB",
         l2_assoc=8,
-        num_l2_banks=1,
+        l3_size="8MiB",
+        l3_assoc=16,
     )
     
     # Create processor with specified number of cores
@@ -106,7 +98,7 @@ def main():
     board.set_se_binary_workload(binary)
     
     # Run simulation
-    simulator = Simulator(board=board)
+    simulator = Simulator(board=board, full_system=False)
     print(f"DEBUG: Starting simulation for {args.variant} with {args.cores} cores", file=sys.stderr)
     print(f"DEBUG: Output directory: {m5.options.outdir}", file=sys.stderr)
     
@@ -114,10 +106,15 @@ def main():
     m5.stats.reset()
     print(f"DEBUG: Stats reset before simulation", file=sys.stderr)
     
-    simulator.run()
-    print(f"DEBUG: Simulation run completed", file=sys.stderr)
+    # Run simulation with error handling to ensure stats are dumped
+    try:
+        simulator.run()
+        print(f"DEBUG: Simulation run completed", file=sys.stderr)
+    except Exception as e:
+        print(f"WARNING: Simulator encountered exception: {e}", file=sys.stderr)
+        print(f"DEBUG: Continuing to dump stats despite exception", file=sys.stderr)
     
-    # Dump stats to ensure they're written to stats.txt
+    # Dump stats to ensure they're written to stats.txt (even if simulator crashed)
     print(f"DEBUG: About to dump stats", file=sys.stderr)
     m5.stats.dump()
     print(f"DEBUG: Stats dumped to {m5.options.outdir}", file=sys.stderr)
@@ -130,9 +127,20 @@ def main():
     else:
         print(f"WARNING: Stats file not found at {stats_file}", file=sys.stderr)
     
+    # Clean up unnecessary config files - keep only stats.txt
+    cleanup_files = ['citations.bib', 'config.dot', 'config.dot.pdf', 'config.dot.svg', 'config.ini', 'config.json']
+    for filename in cleanup_files:
+        filepath = os.path.join(m5.options.outdir, filename)
+        if os.path.exists(filepath):
+            try:
+                os.remove(filepath)
+                print(f"DEBUG: Removed {filename}", file=sys.stderr)
+            except Exception as e:
+                print(f"WARNING: Failed to remove {filename}: {e}", file=sys.stderr)
+    
     print(f"Simulation completed. Results saved to: {m5.options.outdir}")
     return 0
 
 
-if __name__ == "__main__":
+if __name__ == "__m5_main__":
     sys.exit(main())

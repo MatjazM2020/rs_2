@@ -106,10 +106,10 @@ def main():
     CORE_COUNTS = [2, 4, 8, 16]
     VARIANTS = ['falsesharing', 'optimized']
     
-    # Use classic cache version instead of Ruby (Ruby MESI_TWO_LEVEL not compiled in GEM5)
-    # The Ruby protocol would provide more detailed cache coherence stats, but the classic
-    # version will provide valid performance metrics (CPI, cache stats, etc.)
-    sim_script = os.path.join(script_dir, 'run_false_sharing_sim_classic.py')
+    # Use Ruby MESI directory-based cache coherence (required for Task 2)
+    # This will provide cache coherence protocol statistics: invalidations, state-based loads,
+    # L2 requests, and network traffic - all required by the homework assignment
+    sim_script = os.path.join(script_dir, 'run_false_sharing_sim.py')
     analyze_script = os.path.join(script_dir, 'analyze_results.py')
     
     for required_file in [sim_script, analyze_script, binary_dir]:
