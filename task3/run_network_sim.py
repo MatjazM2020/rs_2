@@ -1,23 +1,15 @@
 #!/usr/bin/env python3
 """
-Network Topology Simulation Runner
-Runs gem5 simulations with different interconnection network topologies.
-Measures network traffic for DAXPY kernel.
+Network Topology Analysis - gem5 Simulation Runner
+Runs simulations with configurable core count and network topology.
+
+This script must be run through gem5.opt to access the m5 module:
+  gem5.opt run_network_sim.py --cores 2 --network ring --binary-path /path/to/binary
 """
 
 import sys
 import os
 import argparse
-
-# Add gem5 build directory to Python path
-gem5_possible_paths = [
-    "/gem5/build/RISCV",
-    "/opt/gem5/build/RISCV",
-    "/usr/local/gem5/build/RISCV",
-]
-for gem5_path in gem5_possible_paths:
-    if os.path.exists(gem5_path) and gem5_path not in sys.path:
-        sys.path.insert(0, gem5_path)
 
 import m5
 from gem5.components.boards.simple_board import SimpleBoard
@@ -28,9 +20,9 @@ from gem5.isas import ISA
 from gem5.resources.resource import CustomResource
 from gem5.simulate.simulator import Simulator
 
-# Import classic cache hierarchy
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'smp_classic'))
-from three_level import PrivateL1PrivateL2SharedL3CacheHierarchy
+# Import Ruby MESI cache hierarchy with network topology support
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'smp_ruby'))
+from mesi_two_level_networks import MESITwoLevelCacheHierarchyWithNetworks
 
 
 def main():
@@ -64,20 +56,30 @@ def main():
     os.makedirs(m5.options.outdir, exist_ok=True)
     
     print(f"DEBUG: Network topology: {args.network}", file=sys.stderr)
-    print(f"DEBUG: Using classic cache hierarchy", file=sys.stderr)
+    print(f"DEBUG: Using Ruby MESI cache hierarchy with {args.network} network", file=sys.stderr)
     
-    # Create classic cache hierarchy
-    cache_hierarchy = PrivateL1PrivateL2SharedL3CacheHierarchy(
+    # Map command-line network names to cache hierarchy parameter names
+    network_type_map = {
+        "point_to_point": "point_to_point",
+        "ring": "ring",
+        "crossbar": "crossbar",
+    }
+    
+    network_type = network_type_map.get(args.network, "point_to_point")
+    
+    # Create Ruby MESI cache hierarchy with specified network topology
+    # Task 3: Measures network traffic for different interconnection topologies
+    cache_hierarchy = MESITwoLevelCacheHierarchyWithNetworks(
         l1d_size="32KiB",
         l1d_assoc=8,
         l1i_size="32KiB",
         l1i_assoc=8,
         l2_size="256KiB",
         l2_assoc=8,
-        l3_size="8MiB",
-        l3_assoc=16,
+        num_l2_banks=1,
+        network_type=network_type,
     )
-    cache_type = "Classic (no network topology support)"
+    cache_type = f"Ruby MESI ({args.network} network)"
     
     # Create processor with specified core count
     processor = SimpleProcessor(
@@ -125,7 +127,9 @@ def main():
         simulator.run()
         print(f"DEBUG: Simulation run completed", file=sys.stderr)
     except Exception as e:
-        print(f"WARNING: Simulator encountered exception: {e}", file=sys.stderr)
+        import traceback
+        print(f"WARNING: Simulator encountered exception: {type(e).__name__}: {e}", file=sys.stderr)
+        print(f"DEBUG: Traceback: {traceback.format_exc()}", file=sys.stderr)
         print(f"DEBUG: Continuing to dump stats despite exception", file=sys.stderr)
     
     # Dump stats to ensure they're written to stats.txt (even if simulator crashed)

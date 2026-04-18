@@ -56,21 +56,42 @@ def extract_stats(stats_file):
 
 
 def extract_network_metrics(stats):
-    """Extract network-specific metrics."""
+    """Extract network-specific metrics from gem5 stats.
+    
+    Supports both Ruby (MESI) and classic cache hierarchies.
+    Ruby uses board.cache_hierarchy.ruby_system.network.msg_count.* naming.
+    """
     if not stats:
         return None
     
     metrics = {}
-    network_prefixes = [
-        'network.msg_count.Request_Control',
-        'network.msg_count.Response_Data',
-        'network.msg_count.Writeback_Data',
-    ]
     
-    for prefix in network_prefixes:
-        if prefix in stats:
-            key = prefix.split('.')[-1]
-            metrics[key] = stats[prefix]
+    # Ruby network metric names (with board.cache_hierarchy prefix)
+    ruby_network_keys = {
+        'Request_Control': 'board.cache_hierarchy.ruby_system.network.msg_count.Request_Control',
+        'Response_Data': 'board.cache_hierarchy.ruby_system.network.msg_count.Response_Data',
+        'Writeback_Data': 'board.cache_hierarchy.ruby_system.network.msg_count.Writeback_Data',
+    }
+    
+    # Classic network metric names (fallback)
+    classic_network_keys = {
+        'Request_Control': 'network.msg_count.Request_Control',
+        'Response_Data': 'network.msg_count.Response_Data',
+        'Writeback_Data': 'network.msg_count.Writeback_Data',
+    }
+    
+    # Try Ruby keys first
+    found_ruby = False
+    for key_name, stat_name in ruby_network_keys.items():
+        if stat_name in stats:
+            metrics[key_name] = stats[stat_name]
+            found_ruby = True
+    
+    # If no Ruby keys found, try classic keys
+    if not found_ruby:
+        for key_name, stat_name in classic_network_keys.items():
+            if stat_name in stats:
+                metrics[key_name] = stats[stat_name]
     
     # Calculate total network traffic
     if metrics:

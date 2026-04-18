@@ -67,7 +67,7 @@ def extract_key_metrics(metrics):
         return metrics.get(key, default)
     
     # Try to determine which cache hierarchy is used by checking for metrics
-    is_ruby = 'system.ruby_system.L1Cache_Controller.Inv::total' in metrics
+    is_ruby = 'board.cache_hierarchy.ruby_system.L1Cache_Controller.Inv::total' in metrics
     is_classic = 'board.processor.cores0.core.cpi' in metrics
     
     if is_classic:
@@ -135,29 +135,29 @@ def extract_key_metrics(metrics):
             extracted['insts_per_cpu'] = cpu_insts
     
     # Invalidations (Ruby only - will be 0 for classic cache)
-    inv_key = 'system.ruby_system.L1Cache_Controller.Inv::total'
+    inv_key = 'board.cache_hierarchy.ruby_system.L1Cache_Controller.Inv::total'
     extracted['invalidations'] = get_metric(inv_key, 0)
     for state in ['I', 'S', 'E', 'M']:
-        load_key = f'system.ruby_system.L1Cache_Controller.{state}.Load::total'
+        load_key = f'board.cache_hierarchy.ruby_system.L1Cache_Controller.{state}.Load::total'
         extracted[f'loads_{state}'] = get_metric(load_key, 0)
     
     # L2 requests
     extracted['l2_gets'] = get_metric(
-        'system.ruby_system.L2Cache_Controller.L1_GETS::total', 0
+        'board.cache_hierarchy.ruby_system.L2Cache_Controller.L1_GETS', 0
     )
     extracted['l2_getx'] = get_metric(
-        'system.ruby_system.L2Cache_Controller.L1_GETX::total', 0
+        'board.cache_hierarchy.ruby_system.L2Cache_Controller.L1_GETX', 0
     )
     
     # Network traffic
     extracted['net_request_control'] = get_metric(
-        'system.ruby_system.network.msg_count.Request_Control::total', 0
+        'board.cache_hierarchy.ruby_system.network.msg_count.Request_Control', 0
     )
     extracted['net_response_data'] = get_metric(
-        'system.ruby_system.network.msg_count.Response_Data::total', 0
+        'board.cache_hierarchy.ruby_system.network.msg_count.Response_Data', 0
     )
     extracted['net_writeback_data'] = get_metric(
-        'system.ruby_system.network.msg_count.Writeback_Data::total', 0
+        'board.cache_hierarchy.ruby_system.network.msg_count.Writeback_Data', 0
     )
     
     # Execution time calculation

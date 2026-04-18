@@ -14,7 +14,11 @@ from datetime import datetime
 
 
 def run_simulation(gem5_path, sim_script, cores, network, binary_path, output_dir, script_dir, gem5_container=None):
-    """Run a single simulation configuration using gem5.opt."""
+    """Run a single network topology simulation using gem5.opt with Ruby MESI.
+    
+    Uses srun for proper HPC resource allocation and Ruby MESI_TWO_LEVEL with network
+    topologies to analyze interconnection network traffic and latency characteristics.
+    """
     
     if not os.path.exists(binary_path):
         print(f"  ERROR: Binary not found: {binary_path}")
@@ -32,12 +36,12 @@ def run_simulation(gem5_path, sim_script, cores, network, binary_path, output_di
     print(f"  Running: {network:15s} with {cores:2d} cores...")
     
     try:
-        # If container is available, run inside it with bind mounts
+        # If container is available, run inside it with srun for proper resource allocation
         if gem5_container and os.path.exists(gem5_container):
             # Bind mount the workspace directory so container can access all files
             workspace_root = os.path.dirname(os.path.dirname(script_dir))
             container_cmd = [
-                'apptainer', 'exec',
+                'srun', 'apptainer', 'exec',
                 '--bind', f"{workspace_root}:{workspace_root}",
                 gem5_container
             ] + cmd
@@ -49,9 +53,10 @@ def run_simulation(gem5_path, sim_script, cores, network, binary_path, output_di
                 timeout=7200,  # 2 hours timeout
             )
         else:
-            # Otherwise run directly
+            # Otherwise run directly with srun (should use srun if in HPC environment)
+            container_cmd = ['srun'] + cmd
             result = subprocess.run(
-                cmd,
+                container_cmd,
                 check=False,
                 capture_output=True,
                 text=True,
@@ -62,15 +67,36 @@ def run_simulation(gem5_path, sim_script, cores, network, binary_path, output_di
         if result.returncode != 0 and result.returncode != -6:
             print(f"    ERROR: Simulation failed with code {result.returncode}")
             if result.stderr:
-                print(f"    STDERR: {result.stderr[:200]}")
+                print(f"    STDERR: {result.stderr[:500]}")
             return False
         elif result.returncode == -6:
             # Exit code -6 is SIGABRT, but stats may have been collected before crash
             print(f"    PARTIAL SUCCESS (SIGABRT after stats collection)")
-            return True
+            # Verify stats were actually written
+            stats_file = os.path.join(output_dir, 'stats.txt')
+            if os.path.exists(stats_file) and os.path.getsize(stats_file) > 0:
+                return True
+            else:
+                print(f"    WARNING: Stats file empty or missing after SIGABRT")
+                return False
         else:
-            print(f"    SUCCESS")
-            return True
+            # Verify stats.txt exists and is non-empty before reporting success
+            stats_file = os.path.join(output_dir, 'stats.txt')
+            if os.path.exists(stats_file):
+                file_size = os.path.getsize(stats_file)
+                if file_size > 0:
+                    print(f"    SUCCESS (stats: {file_size} bytes)")
+                    return True
+                else:
+                    print(f"    ERROR: Stats file is empty (0 bytes) - simulation did not run properly")
+                    if result.stderr:
+                        print(f"    STDERR: {result.stderr[:500]}")
+                    return False
+            else:
+                print(f"    ERROR: Stats file not created")
+                if result.stderr:
+                    print(f"    STDERR: {result.stderr[:500]}")
+                return False
     
     except subprocess.TimeoutExpired:
         print(f"    ERROR: Simulation timed out (2 hours)")
@@ -125,8 +151,9 @@ def extract_network_stats(stats_file):
 
 
 def main():
-    # Configuration - use standardized GEM5_PATH
-    GEM5_PATH = "/d/hpc/projects/FRI/GEM5/gem5_workspace/gem5/build/RISCV/gem5.opt"
+    # Configuration - use standardized GEM5_PATH with Ruby-enabled build
+    # RISCV_ALL_RUBY includes Ruby memory system for network topology analysis
+    GEM5_PATH = "/d/hpc/projects/FRI/GEM5/gem5_workspace/gem5/build/RISCV_ALL_RUBY/gem5.opt"
     GEM5_CONTAINER = "/d/hpc/projects/FRI/GEM5/gem5_workspace/gem5_rv.sif"
     
     # Determine workspace paths

@@ -20,9 +20,9 @@ from gem5.isas import ISA
 from gem5.resources.resource import CustomResource
 from gem5.simulate.simulator import Simulator
 
-# Import classic cache hierarchy
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'smp_classic'))
-from three_level import PrivateL1PrivateL2SharedL3CacheHierarchy
+# Import Ruby MESI cache hierarchy (directory-based cache coherence protocol)
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'smp_ruby'))
+from mesi_two_level import MESITwoLevelCacheHierarchy
 
 
 def main():
@@ -62,17 +62,22 @@ def main():
     print(f"DEBUG: Using outdir set by gem5.opt: {m5.options.outdir}", file=sys.stderr)
     os.makedirs(m5.options.outdir, exist_ok=True)
     
-    # Create classic cache hierarchy
-    print(f"DEBUG: Using classic cache hierarchy", file=sys.stderr)
-    cache_hierarchy = PrivateL1PrivateL2SharedL3CacheHierarchy(
+    # Create Ruby MESI cache hierarchy (directory-based cache coherence protocol)
+    # Required for Task 2: analyzes false sharing using MESI_TWO_LEVEL protocol
+    # This provides statistics for:
+    # - Invalidations (ruby_system.L1Cache_Controller.Inv::total)
+    # - State-based loads (L1Cache_Controller.I/S/E/M.Load::total)
+    # - L2 requests (L2Cache_Controller.L1_GETS, L1_GETX)
+    # - Network traffic (network.msg_count.Request_Control, Response_Data, Writeback_Data)
+    print(f"DEBUG: Using Ruby MESI two-level cache hierarchy", file=sys.stderr)
+    cache_hierarchy = MESITwoLevelCacheHierarchy(
         l1d_size="32KiB",
         l1d_assoc=8,
         l1i_size="32KiB",
         l1i_assoc=8,
         l2_size="256KiB",
         l2_assoc=8,
-        l3_size="8MiB",
-        l3_assoc=16,
+        num_l2_banks=1,
     )
     
     # Create processor with specified number of cores
@@ -92,7 +97,6 @@ def main():
         memory=memory,
         cache_hierarchy=cache_hierarchy,
     )
-    
     # Load binary and set as workload
     binary = CustomResource(binary_path)
     board.set_se_binary_workload(binary)
@@ -111,7 +115,9 @@ def main():
         simulator.run()
         print(f"DEBUG: Simulation run completed", file=sys.stderr)
     except Exception as e:
-        print(f"WARNING: Simulator encountered exception: {e}", file=sys.stderr)
+        import traceback
+        print(f"WARNING: Simulator encountered exception: {type(e).__name__}: {e}", file=sys.stderr)
+        print(f"DEBUG: Traceback: {traceback.format_exc()}", file=sys.stderr)
         print(f"DEBUG: Continuing to dump stats despite exception", file=sys.stderr)
     
     # Dump stats to ensure they're written to stats.txt (even if simulator crashed)
